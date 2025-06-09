@@ -1,0 +1,112 @@
+services:
+  nats:
+    image: nats:2.10.16-alpine
+    container_name: nats-server
+    ports:
+      - "4222:4222" # Client port
+      - "8222:8222" # Monitoring port
+    command: -js
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4222"]
+      interval: 5s
+      timeout: 1s
+      retries: 5
+
+  influxdb:
+    image: influxdb:2.7.5-alpine
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_INIT_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_INIT_PASSWORD:-password}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+      - DOCKER_INFLUXDB_INIT_RETENTION=1w
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
+      interval: 5s
+      timeout: 1s
+      retries: 5
+
+  daemon-go:
+    build: ./daemon-service-go
+    container_name: daemon-service-go
+    environment:
+      - NATS_URL=${NATS_URL}
+      - GENERATION_INTERVAL_SECONDS=${GENERATION_INTERVAL_SECONDS}
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  writer-go:
+    build: ./writer-service-go
+    container_name: writer-service-go
+    environment:
+      - NATS_URL=${NATS_URL}
+      - INFLUXDB_HOST=${INFLUXDB_HOST}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+    depends_on:
+      nats:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_PATHS_DATA=/var/lib/grafana
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+    depends_on:
+      influxdb:
+        condition: service_healthy
+
+  reader-py:
+    build: ./reader-service-py
+    container_name: reader-service-py
+    environment:
+      - NATS_URL=${NATS_URL}
+      - NATS_SUBJECT_REQUEST=${NATS_SUBJECT_REQUEST}
+      - INFLUXDB_HOST=${INFLUXDB_HOST}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+    depends_on:
+      nats:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+
+  client-go: 
+    build: ./client-service-go
+    container_name: client-service-go
+    environment:
+      - NATS_URL=${NATS_URL}
+      - NATS_SUBJECT_REQUEST=${NATS_SUBJECT_REQUEST} 
+      - CLIENT_MIN_CRITICALITY=${CLIENT_MIN_CRITICALITY} 
+    depends_on:
+      nats:
+        condition: service_healthy
+      reader-py:
+        condition: service_started 
+volumes:
+  influxdb_data:
+  grafana_data:

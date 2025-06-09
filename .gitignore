@@ -1,0 +1,37 @@
+# Compiled Go binaries
+*/daemon
+*/writer
+*/reader
+*/client
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go temporary files
+.cache/
+go.sum # We keep go.mod, but go.sum can be regenerated, though often it's committed
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/ # Virtual environment directory
+venv/  # Another common name for virtual environment
+.mypy_cache/
+
+# Node.js (if any services are added later)
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example # If you have a template .env file you want to commit
+
+# Docker
+*.log # General log files
+volumes/ # If you were to mount local volumes directly, not Docker named volumes
+
+# OS generated files
+.DS_Store
+Thumbs.db
